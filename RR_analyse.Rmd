@@ -1,0 +1,424 @@
+---
+title: "Analyse d'expansion"
+author: "Baptiste Crinière-Boizet"
+output:
+  html_document:
+    theme: united
+    toc: true
+    toc_float: true
+---
+
+```{r echo = FALSE,warning=FALSE, message=FALSE, results='hide'}
+library(plotly)
+library(DT)
+library(tidyverse)
+setwd("/home/baptiste.criniere/Documents/PB_NC_MB/Data/")
+data1 <- openxlsx::read.xlsx("expansion_Barbier.xlsx", sheet = 1)
+data2 <- openxlsx::read.xlsx("expansion_Barbier.xlsx", sheet = 2)
+
+data2 <- data2 %>% 
+  dplyr::select(-"FID",-"Sex", -"Onset.FTD",-"Onset.ALS", -"ALS.(1/0)", -"age.at.death", -"FTD.disease.duration.at.death",
+               -"ALS.disease.duration.at.death" )
+data1 <- data1 %>% 
+  dplyr::rename("ALS" = "ALS.(1/0)")
+gene <- names(data1)[10:45]
+outcome <- names(data1)[4:9]
+data <- data1 %>% 
+  dplyr::left_join(data2, by = "ID") %>% 
+  dplyr::mutate(Onset.FTD = Onset.FTD %>% as.numeric) %>% 
+  dplyr::mutate(Onset.ALS = Onset.ALS %>% as.numeric) %>% 
+  dplyr::mutate(age.at.death = age.at.death %>% as.numeric) %>% 
+  dplyr::mutate(FTD.disease.duration.at.death = FTD.disease.duration.at.death %>% as.numeric) %>% 
+  dplyr::mutate(ALS.disease.duration.at.death = ALS.disease.duration.at.death %>% as.numeric) %>% 
+  dplyr::mutate("ALS.(1/0)" =" ALS.(1/0)" %>% as.numeric)
+  
+M <- max(as.numeric(data$FID), na.rm = TRUE)
+for (i in 1:nrow(data)){
+  if (data$FID[i] %in% c(NA, "na")){
+    data$FID[i] <- M + i
+  }
+}
+data <- data
+# Patient SLA-SAL-BLA-030-008 .
+data <- data %>% 
+  dplyr::mutate(FID = FID %>% 
+                  factor) %>% 
+  dplyr::mutate(ALS = ifelse(ALS %in% ".", NA, ALS)) %>% 
+  dplyr::mutate(ALS = ALS %>% factor)
+```
+
+## Onset FTD {.tabset}
+### Table des résultats
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+result <- data.frame(gene = gene, min.coeff = NA, max.coeff = NA, min.pval = NA, max.pval = NA)
+for (i in 1:length(gene)){
+  a <- paste0(gene[i],".x")
+  b <- paste0(gene[i], ".y")
+  d <- paste(a, by = "+", b)
+  formula <- paste(outcome[1], by = " ~ Sex + (1|FID) +", d)
+  model <- lmerTest::lmer(formula = formula, data = data) 
+  result$min.coeff[i] <- coef(summary(model))[3,1]
+  result$max.coeff[i] <- coef(summary(model))[4,1]
+  result$min.pval[i] <- coef(summary(model))[3,5]
+  result$max.pval[i] <- coef(summary(model))[4,5]
+}
+result <- result %>% 
+ mutate_if(is.numeric, round, digits = 4)
+DT::datatable(result, rownames = FALSE, colnames = c("Gene", "Min coeff", "Max coeff", "Min pvalue", "Maxpvalue"))
+```
+
+### Manhanttan plot {.tabset}
+#### Min
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+result$id <- 1:nrow(result)
+fig <- result %>% 
+  ggplot(aes(x = id, y = -1*log10(min.pval), label = gene))+
+  geom_point(color = "dodgerblue3")+
+  geom_hline(yintercept = 1.3, color = "darkorange1",linetype = "dashed")+
+  geom_hline(yintercept = 2.85, color = "darkorange3", linetype = "dashed")+
+  theme_bw()+
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank())+
+  labs(y = "-log10(p)")+
+  ylim(c(0,4))
+  
+fig <- ggplotly(tooltip = c("label"))
+htmltools::div(fig,align="center")
+```
+
+#### Max
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+result$id <- 1:nrow(result)
+fig <- result %>% 
+  ggplot(aes(x = id, y = -1*log10(max.pval), label = gene))+
+  geom_point(color = "dodgerblue3")+
+  geom_hline(yintercept = 1.3, color = "darkorange1",linetype = "dashed")+
+  geom_hline(yintercept = 2.85, color = "darkorange3", linetype = "dashed")+
+  theme_bw()+
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank())+
+  labs(y = "-log10(p)")+
+  ylim(c(0,4))
+  
+fig <- ggplotly(tooltip = c("label"))
+htmltools::div(fig,align="center")
+```
+
+## Onset ALS {.tabset}
+### Table des résultats
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+result <- data.frame(gene = gene, min.coeff = NA, max.coeff = NA, min.pval = NA, max.pval = NA)
+for (i in 1:length(gene)){
+  if (!gene[i] %in% c("PABPN1")){
+    a <- paste0(gene[i],".x")
+    b <- paste0(gene[i], ".y")
+    d <- paste(a, by = "+", b)
+    formula <- paste(outcome[2], by = " ~ Sex + (1|FID) +", d)
+    model <- lmerTest::lmer(formula = formula, data = data) 
+    result$min.coeff[i] <- coef(summary(model))[3,1]
+    result$max.coeff[i] <- coef(summary(model))[4,1]
+    result$min.pval[i] <- coef(summary(model))[3,5]
+    result$max.pval[i] <- coef(summary(model))[4,5]
+  }
+}
+result <- result %>% 
+ mutate_if(is.numeric, round, digits = 4)
+DT::datatable(result, rownames = FALSE, colnames = c("Gene", "Min coeff", "Max coeff", "Min pvalue", "Maxpvalue"))
+```
+
+### Manhanttan plot {.tabset}
+#### Min
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+result$id <- 1:nrow(result)
+fig <- result %>% 
+  ggplot(aes(x = id, y = -1*log10(min.pval), label = gene))+
+  geom_point(color = "dodgerblue3")+
+  geom_hline(yintercept = 1.3, color = "darkorange1",linetype = "dashed")+
+  geom_hline(yintercept = 2.85, color = "darkorange3", linetype = "dashed")+
+  theme_bw()+
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank())+
+  labs(y = "-log10(p)")+
+  ylim(c(0,4))
+  
+fig <- ggplotly(tooltip = c("label"))
+htmltools::div(fig,align="center")
+```
+
+#### Max
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+result$id <- 1:nrow(result)
+fig <- result %>% 
+  ggplot(aes(x = id, y = -1*log10(max.pval), label = gene))+
+  geom_point(color = "dodgerblue3")+
+  geom_hline(yintercept = 1.3, color = "darkorange1",linetype = "dashed")+
+  geom_hline(yintercept = 2.85, color = "darkorange3", linetype = "dashed")+
+  theme_bw()+
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank())+
+  labs(y = "-log10(p)")+
+  ylim(c(0,4))
+  
+fig <- ggplotly(tooltip = c("label"))
+htmltools::div(fig,align="center")
+```
+
+## Age at death {.tabset}
+### Table des résultats
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+result <- data.frame(gene = gene, min.coeff = NA, max.coeff = NA, min.pval = NA, max.pval = NA)
+for (i in 1:length(gene)){
+  if (!gene[i] %in% c("PABPN1")){
+    a <- paste0(gene[i],".x")
+    b <- paste0(gene[i], ".y")
+    d <- paste(a, by = "+", b)
+    formula <- paste(outcome[4], by = " ~ Sex + (1|FID) +", d)
+    model <- lmerTest::lmer(formula = formula, data = data) 
+    result$min.coeff[i] <- coef(summary(model))[3,1]
+    result$max.coeff[i] <- coef(summary(model))[4,1]
+    result$min.pval[i] <- coef(summary(model))[3,5]
+    result$max.pval[i] <- coef(summary(model))[4,5]
+  }
+}
+result <- result %>% 
+ mutate_if(is.numeric, round, digits = 4)
+DT::datatable(result, rownames = FALSE, colnames = c("Gene", "Min coeff", "Max coeff", "Min pvalue", "Maxpvalue"))
+```
+
+### Manhanttan plot {.tabset}
+#### Min
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+result$id <- 1:nrow(result)
+fig <- result %>% 
+  ggplot(aes(x = id, y = -1*log10(min.pval), label = gene))+
+  geom_point(color = "dodgerblue3")+
+  geom_hline(yintercept = 1.3, color = "darkorange1",linetype = "dashed")+
+  geom_hline(yintercept = 2.85, color = "darkorange3", linetype = "dashed")+
+  theme_bw()+
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank())+
+  labs(y = "-log10(p)")+
+  ylim(c(0,4))
+  
+fig <- ggplotly(tooltip = c("label"))
+htmltools::div(fig,align="center")
+```
+
+#### Max
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+result$id <- 1:nrow(result)
+fig <- result %>% 
+  ggplot(aes(x = id, y = -1*log10(max.pval), label = gene))+
+  geom_point(color = "dodgerblue3")+
+  geom_hline(yintercept = 1.3, color = "darkorange1",linetype = "dashed")+
+  geom_hline(yintercept = 2.85, color = "darkorange3", linetype = "dashed")+
+  theme_bw()+
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank())+
+  labs(y = "-log10(p)")+
+  ylim(c(0,4))
+  
+fig <- ggplotly(tooltip = c("label"))
+htmltools::div(fig,align="center")
+```
+
+## FTD disease duration at death {.tabset}
+### Table descriptive
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+result <- data.frame(gene = gene, min.coeff = NA, max.coeff = NA, min.pval = NA, max.pval = NA)
+for (i in 1:length(gene)){
+  if (!gene[i] %in% c("PABPN1")){
+    a <- paste0(gene[i],".x")
+    b <- paste0(gene[i], ".y")
+    d <- paste(a, by = "+", b)
+    formula <- paste(outcome[5], by = " ~ Sex + (1|FID) +", d)
+    model <- lmerTest::lmer(formula = formula, data = data) 
+    result$min.coeff[i] <- coef(summary(model))[3,1]
+    result$max.coeff[i] <- coef(summary(model))[4,1]
+    result$min.pval[i] <- coef(summary(model))[3,5]
+    result$max.pval[i] <- coef(summary(model))[4,5]
+  }
+}
+result <- result %>% 
+ mutate_if(is.numeric, round, digits = 4)
+DT::datatable(result, rownames = FALSE, colnames = c("Gene", "Min coeff", "Max coeff", "Min pvalue", "Maxpvalue"))
+```
+
+### Manhanttan plot {.tabset}
+#### Min
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+result$id <- 1:nrow(result)
+fig <- result %>% 
+  ggplot(aes(x = id, y = -1*log10(min.pval), label = gene))+
+  geom_point(color = "dodgerblue3")+
+  geom_hline(yintercept = 1.3, color = "darkorange1",linetype = "dashed")+
+  geom_hline(yintercept = 2.85, color = "darkorange3", linetype = "dashed")+
+  theme_bw()+
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank())+
+  labs(y = "-log10(p)")+
+  ylim(c(0,4))
+  
+fig <- ggplotly(tooltip = c("label"))
+htmltools::div(fig,align="center")
+```
+
+#### Max
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+result$id <- 1:nrow(result)
+fig <- result %>% 
+  ggplot(aes(x = id, y = -1*log10(max.pval), label = gene))+
+  geom_point(color = "dodgerblue3")+
+  geom_hline(yintercept = 1.3, color = "darkorange1",linetype = "dashed")+
+  geom_hline(yintercept = 2.85, color = "darkorange3", linetype = "dashed")+
+  theme_bw()+
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank())+
+  labs(y = "-log10(p)")+
+  ylim(c(0,4))
+  
+fig <- ggplotly(tooltip = c("label"))
+htmltools::div(fig,align="center")
+```
+
+
+
+
+## ALS disease duration at death {.tabset}
+### Table descriptive
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+result <- data.frame(gene = gene, min.coeff = NA, max.coeff = NA, min.pval = NA, max.pval = NA)
+for (i in 1:length(gene)){
+  if (!gene[i] %in% c("PABPN1")){
+    a <- paste0(gene[i],".x")
+    b <- paste0(gene[i], ".y")
+    d <- paste(a, by = "+", b)
+    formula <- paste(outcome[6], by = " ~ Sex + (1|FID) +", d)
+    model <- lmerTest::lmer(formula = formula, data = data) 
+    result$min.coeff[i] <- coef(summary(model))[3,1]
+    result$max.coeff[i] <- coef(summary(model))[4,1]
+    result$min.pval[i] <- coef(summary(model))[3,5]
+    result$max.pval[i] <- coef(summary(model))[4,5]
+  }
+}
+result <- result %>% 
+ mutate_if(is.numeric, round, digits = 4)
+DT::datatable(result, rownames = FALSE, colnames = c("Gene", "Min coeff", "Max coeff", "Min pvalue", "Maxpvalue"))
+```
+
+### Manhanttan plot {.tabset}
+#### Min
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+result$id <- 1:nrow(result)
+fig <- result %>% 
+  ggplot(aes(x = id, y = -1*log10(min.pval), label = gene))+
+  geom_point(color = "dodgerblue3")+
+  geom_hline(yintercept = 1.3, color = "darkorange1",linetype = "dashed")+
+  geom_hline(yintercept = 2.85, color = "darkorange3", linetype = "dashed")+
+  theme_bw()+
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank())+
+  labs(y = "-log10(p)")+
+  ylim(c(0,4))
+  
+fig <- ggplotly(tooltip = c("label"))
+htmltools::div(fig,align="center")
+```
+
+#### Max
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+result$id <- 1:nrow(result)
+fig <- result %>% 
+  ggplot(aes(x = id, y = -1*log10(max.pval), label = gene))+
+  geom_point(color = "dodgerblue3")+
+  geom_hline(yintercept = 1.3, color = "darkorange1",linetype = "dashed")+
+  geom_hline(yintercept = 2.85, color = "darkorange3", linetype = "dashed")+
+  theme_bw()+
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank())+
+  labs(y = "-log10(p)")+
+  ylim(c(0,4))
+  
+fig <- ggplotly(tooltip = c("label"))
+htmltools::div(fig,align="center")
+```
+
+
+
+
+## ALS {.tabset}
+### Table descriptive
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+result <- data.frame(gene = gene, min.coeff = NA, max.coeff = NA, min.pval = NA, max.pval = NA)
+for (i in 1:length(gene)){
+    a <- paste0(gene[i],".x")
+    b <- paste0(gene[i], ".y")
+    d <- paste(a, by = "+", b)
+    formula <- paste(outcome[3], by = " ~ Sex + (1|FID) +", d)
+    model <- lme4::glmer(formula = formula, data = data, family = binomial) 
+    result$min.coeff[i] <- coef(summary(model))[3,1]
+    result$max.coeff[i] <- coef(summary(model))[4,1]
+    result$min.pval[i] <- coef(summary(model))[3,4]
+    result$max.pval[i] <- coef(summary(model))[4,4]
+    if (!is.null(summary(model)$optinfo$conv$lme4$messages)){
+      result[i, 2:5] <- NA
+    }
+}
+result <- result %>% 
+ mutate_if(is.numeric, round, digits = 4)
+DT::datatable(result, rownames = FALSE, colnames = c("Gene", "Min coeff", "Max coeff", "Min pvalue", "Maxpvalue"))
+
+
+#str_detect(summary(model)$optinfo$conv$lme4$messages, "Model failed to converge") & 
+```
+
+### Manhanttan plot {.tabset}
+#### Min
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+result$id <- 1:nrow(result)
+fig <- result %>% 
+  ggplot(aes(x = id, y = -1*log10(min.pval), label = gene))+
+  geom_point(color = "dodgerblue3")+
+  geom_hline(yintercept = 1.3, color = "darkorange1",linetype = "dashed")+
+  geom_hline(yintercept = 2.85, color = "darkorange3", linetype = "dashed")+
+  theme_bw()+
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank())+
+  labs(y = "-log10(p)")+
+  ylim(c(0,4))
+  
+fig <- ggplotly(tooltip = c("label"))
+htmltools::div(fig,align="center")
+```
+
+#### Max
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+result$id <- 1:nrow(result)
+fig <- result %>% 
+  ggplot(aes(x = id, y = -1*log10(max.pval), label = gene))+
+  geom_point(color = "dodgerblue3")+
+  geom_hline(yintercept = 1.3, color = "darkorange1",linetype = "dashed")+
+  geom_hline(yintercept = 2.85, color = "darkorange3", linetype = "dashed")+
+  theme_bw()+
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank())+
+  labs(y = "-log10(p)")+
+  ylim(c(0,4))
+  
+fig <- ggplotly(tooltip = c("label"))
+htmltools::div(fig,align="center")
+```
+
+
